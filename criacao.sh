@@ -43,7 +43,6 @@ az network nsg create \
   --tags owner=$GRUPO environment=dev cost-center=fiap
 
 # 4. Regras do NSG
-
 az network nsg rule create \
   --resource-group "$RG" \
   --nsg-name "$NSG" \

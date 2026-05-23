@@ -1,7 +1,5 @@
 # ─────────────────────────────────────────────────────────────
 # VetFlow – Dockerfile do Banco H2
-# Equivalente ao Dockerfile do MySQL do professor,
-# mas usando H2 (banco permitido pela avaliação)
 # ─────────────────────────────────────────────────────────────
 
 FROM oscarfonts/h2:latest
