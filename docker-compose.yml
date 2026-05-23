@@ -1,0 +1,64 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────
+# VetFlow – Docker Compose
+# Padrão do professor: build de imagem customizada por serviço
+# Serviços: h2server (banco) + app (Spring Boot)
+# ─────────────────────────────────────────────────────────────
+
+services:
+
+  # ──────────────────────────────────────────
+  # Banco de dados H2 em modo servidor TCP
+  # Build a partir do Dockerfile.h2 local
+  # Imagem sugerida pelo professor: oscarfonts/h2
+  # ──────────────────────────────────────────
+  h2server:
+    build:
+      context: .
+      dockerfile: Dockerfile.h2
+    image: vetflow-h2-image         # nome da imagem gerada pelo build
+    container_name: vetflow-h2
+    restart: unless-stopped
+    ports:
+      - "9090:9090"   # H2 TCP Server (usado pela API via JDBC)
+      - "8181:8181"   # H2 Console Web (acesso pelo navegador)
+    volumes:
+      - h2-data:/opt/h2-data        # volume nomeado — persistência obrigatória
+    networks:
+      - vetflow-network
+
+  # ──────────────────────────────────────────
+  # Aplicação Spring Boot (VetFlow API)
+  # Build a partir do Dockerfile local
+  # Usuário não-root definido no Dockerfile
+  # ──────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vetflow-api-image        # nome da imagem gerada pelo build
+    container_name: vetflow-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - h2server
+    networks:
+      - vetflow-network
+
+# ──────────────────────────────────────────
+# Volume nomeado (persistência obrigatória)
+# ──────────────────────────────────────────
+volumes:
+  h2-data:
+    name: vetflow-h2-data
+
+# ──────────────────────────────────────────
+# Rede interna (containers se comunicam
+# pelo nome do serviço, ex: "h2server")
+# ──────────────────────────────────────────
+networks:
+  vetflow-network:
+    name: vetflow-network
+    driver: bridge
