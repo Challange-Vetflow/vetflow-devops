@@ -53,7 +53,7 @@ vacinas e medicamentos, e serve de backend para app mobile e dashboard clínico.
 
 ## Arquitetura Macro na Nuvem
 
-![Arquitetura VetFlow](docs/arquitetura_vetflow.png)
+![Arquitetura VetFlow](vetflow.png)
 
 | Componente | Descrição |
 |-----------|-----------|
