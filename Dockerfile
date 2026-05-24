@@ -2,12 +2,12 @@
 
 FROM maven:3.9-eclipse-temurin-17
 
-# Cria usuário sem privilégios administrativos 
-RUN groupadd -r vetflow && useradd -r -g vetflow vetflow
+# Cria usuário sem privilégios administrativos com home directory
+RUN groupadd -r vetflow && useradd -r -g vetflow -d /home/vetflow -m vetflow
 
-# Cria a pasta /app e transfere a propriedade para o usuário vetflow
+# Cria a pasta /app, o diretório home e o cache do Maven
 # ANTES de copiar os arquivos — garante permissão de escrita no mvn build
-RUN mkdir -p /app && chown -R vetflow:vetflow /app
+RUN mkdir -p /app && mkdir -p /home/vetflow/.m2 && chown -R vetflow:vetflow /app /home/vetflow
 
 WORKDIR /app
 
