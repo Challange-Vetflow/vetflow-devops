@@ -1,12 +1,11 @@
 version: "3.9"
 
-# VetFlow – Docker Compose
+# VetFlow – Docker Compose (Versão com Rede Externa)
 # Serviços: h2server (banco) + app (Spring Boot)
 
 services:
 
   # Banco de dados H2 em modo servidor TCP
-  # Build a partir do Dockerfile.h2 local
   h2server:
     build:
       context: .
@@ -23,8 +22,6 @@ services:
       - vetflow-network
 
   # Aplicação Spring Boot (VetFlow API)
-  # Build a partir do Dockerfile local
-  # Usuário não-root definido no Dockerfile
   app:
     build:
       context: .
@@ -39,15 +36,12 @@ services:
     networks:
       - vetflow-network
 
-# Volume nomeado (persistência obrigatória)
-
+# Volume nomeado para persistência
 volumes:
   h2-data:
     name: vetflow-h2-data
 
-
-# Rede interna (containers se comunicam pelo nome do serviço, ex: "h2server")
+# Configuração da Rede como EXTERNA
 networks:
   vetflow-network:
-    name: vetflow-network
-    driver: bridge
+    external: true
