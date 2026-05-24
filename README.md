@@ -53,33 +53,16 @@ vacinas e medicamentos, e serve de backend para app mobile e dashboard clínico.
 
 ## Arquitetura Macro na Nuvem
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     AZURE (brazilsouth)                     │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Resource Group: rg-Vetflow                     │  │
-│  │                                                      │  │
-│  │  ┌─────────────────────────────────────────────┐    │  │
-│  │  │  VM Ubuntu 22.04 (Standard_D2s_v3)          │    │  │
-│  │  │  NSG: portas 22, 80, 8080, 8181, 9090       │    │  │
-│  │  │                                             │    │  │
-│  │  │  ┌──────────────────┐  ┌─────────────────┐ │    │  │
-│  │  │  │  vetflow-app     │  │  vetflow-h2     │ │    │  │
-│  │  │  │  Spring Boot     │◄─│  H2 TCP Server  │ │    │  │
-│  │  │  │  :8080 (API)     │  │  :9090 / :8181  │ │    │  │
-│  │  │  └──────────────────┘  └────────┬────────┘ │    │  │
-│  │  │     vetflow-network              │          │    │  │
-│  │  │                         [vetflow-h2-data]   │    │  │
-│  │  └─────────────────────────────────────────────┘    │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-         ▲
-  Usuário / Postman
-  GET/POST http://<VM_IP>:8080/api/*
-  Swagger  http://<VM_IP>:8080/swagger-ui.html
-  H2 Web   http://<VM_IP>:8181
-```
+![Arquitetura VetFlow](docs/arquitetura_vetflow.png)
+
+| Componente | Descrição |
+|-----------|-----------|
+| NSG | Firewall Azure — portas 22, 80, 8080, 8181, 9090 |
+| VM Ubuntu 22.04 | Standard_D2s_v3 — região Brazil South |
+| vetflow-app | Container Spring Boot — porta 8080 — usuário vetflow (não root) |
+| vetflow-h2 | Container H2 — TCP interno :1521 (externo :9090) — Web Console :81 (externo :8181) |
+| vetflow-h2-data | Volume nomeado — persiste dados em /opt/h2-data |
+| vetflow-network | Rede bridge externa conectando os dois containers |
 
 ---
 
@@ -175,13 +158,27 @@ docker build -t vetflow-h2-image -f Dockerfile.h2 .
 # Subir o container do banco em background
 docker run --name vetflow-h2 -d \
   --network vetflow-network \
-  -p 9090:9090 \
-  -p 8181:8181 \
+  -p 9090:1521 \
+  -p 8181:81 \
   -v vetflow-h2-data:/opt/h2-data \
   vetflow-h2-image
 
 # Verificar logs
 docker logs -f vetflow-h2
+```
+
+#### Passo 2.1 — Pré-criar o banco H2 ⚠️
+
+> **Atenção:** A imagem `oscarfonts/h2` não cria o banco automaticamente por razões de segurança.  
+> É obrigatório executar este comando **uma única vez** após subir o container H2,  
+> antes de iniciar a API.
+
+```bash
+docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
+  -url "jdbc:h2:/opt/h2-data/vetflowdb" \
+  -user sa -password "" \
+  -sql "SELECT 1;"
+# Esperado: 1 (confirma que o banco foi criado com sucesso)
 ```
 
 #### Passo 3 — Build e run da API
@@ -211,7 +208,7 @@ curl http://localhost:8080/api/pets
 
 # H2 Console Web
 # http://localhost:8181
-# JDBC URL: jdbc:h2:tcp://localhost:9090/h2/opt/h2-data/vetflowdb
+# JDBC URL: jdbc:h2:tcp://localhost:1521//opt/h2-data/vetflowdb
 ```
 
 ---
@@ -227,6 +224,14 @@ docker compose up --build -d
 
 # Verificar containers
 docker compose ps
+
+# ⚠️ Pré-criar o banco H2 (necessário na primeira execução)
+docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
+  -url "jdbc:h2:/opt/h2-data/vetflowdb" \
+  -user sa -password "" \
+  -sql "SELECT 1;"
+# Reiniciar a API após criar o banco:
+docker restart vetflow-app
 
 # Parar tudo
 docker compose down
@@ -303,18 +308,18 @@ Importe o arquivo `docs/VetFlow API.postman_collection.json` no Postman.
 
 > ⚠️ **Atenção:** O arquivo JSON original da collection contém URLs fixas apontando para `http://localhost:8080`. Antes de usar, é necessário:
 >
-> 1. No Postman, clique no ícone de **Environments** (canto superior direito) → **Add**
+> 1. No Postman, clique no ícone de **Environments** → **Add**
 > 2. Nomeie o ambiente como **VetFlow Azure**
 > 3. Adicione a variável:
 >    - **Variable:** `baseUrl`
 >    - **Initial Value:** `http://<IP_DA_VM>:8080`
-> 4. Clique em **Save** e selecione o ambiente **VetFlow Azure** no seletor
+> 4. Clique em **Save** e selecione o ambiente **VetFlow Azure**
 > 5. Nas requisições da collection, substitua a URL fixa por `{{baseUrl}}/api/...`
 >
 > Para testes locais use `baseUrl = http://localhost:8080`.  
 > Para testes em nuvem use `baseUrl = http://<VM_IP>:8080`.
 
-> ⚠️ **Atenção adicional — POST e PUT de Pet:** O JSON da collection não inclui os campos `birthDate` e `weightKg`, que são obrigatórios pela API. Ao usar as requisições **Criar Pet** e **Atualizar Pet**, adicione esses campos no body:
+> ⚠️ **Atenção — POST e PUT de Pet:** Os campos `birthDate` e `weightKg` são obrigatórios pela API mas não estão no JSON original da collection. Sempre inclua esses campos ao usar **Criar Pet** ou **Atualizar Pet**:
 >
 > ```json
 > {
