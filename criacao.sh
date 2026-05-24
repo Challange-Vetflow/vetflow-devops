@@ -19,7 +19,9 @@ SUBNET=subnet-$GRUPO
 NSG=nsg-$GRUPO
 VM=vm-$GRUPO
 
-REPO_URL="https://github.com/Challange-Vetflow/vetflow-java"   
+# Repositórios do projeto
+REPO_JAVA_URL="https://github.com/Challange-Vetflow/vetflow-java"   
+REPO_DEVOPS_URL="https://github.com/Challange-Vetflow/vetflow-devops.git"
 
 # 1. Resource Group
 az group create \
@@ -158,16 +160,25 @@ EOF
     docker compose version
   '
 
-# 7. Clonar repositório, fazer build e subir
+# 7. Clonar repositório DevOps, trazer o código Java, fazer build e subir
 az vm run-command invoke \
   --resource-group "$RG" \
   --name "$VM" \
   --command-id RunShellScript \
   --scripts "
     sudo -u azureuser bash -c '
-      echo \">>> Clonando VetFlow...\"
       cd /home/azureuser
-      git clone $REPO_URL vetflow || (cd vetflow && git pull)
+      
+      echo \">>> Clonando repositório de DevOps (Infra)...\"
+      git clone $REPO_DEVOPS_URL vetflow-infra || (cd vetflow-infra && git pull)
+      
+      echo \">>> Clonando repositório da API Java...\"
+      git clone $REPO_JAVA_URL vetflow || (cd vetflow && git pull)
+      
+      echo \">>> Unificando arquivos de configuração (docker-compose)...\"
+      # Copia o docker-compose.yml e outros arquivos estruturais para a pasta principal do roteiro
+      cp -r /home/azureuser/vetflow-infra/* /home/azureuser/vetflow/
+      
       cd /home/azureuser/vetflow
 
       echo \">>> Criando volume nomeado para persistência do H2...\"
