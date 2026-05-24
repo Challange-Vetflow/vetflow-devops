@@ -32,5 +32,8 @@ EXPOSE 8080
 # Troca para o usuário sem privilégios — a partir daqui nada roda como root
 USER vetflow
 
-# Build Maven + execução do JAR 
-CMD ["bash", "-c", "mvn clean package -DskipTests && java -jar target/*.jar"]
+# Compila o projeto durante o build da imagem — container sobe instantaneamente
+RUN mvn clean package -DskipTests
+
+# Executa apenas o JAR já compilado
+CMD ["java", "-jar", "target/vetflow-0.0.1-SNAPSHOT.jar"]
