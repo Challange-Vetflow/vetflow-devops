@@ -299,6 +299,30 @@ docker network rm vetflow-network
 
 ## Collection Postman
 
-Importe o arquivo `docs/VetFlow API.postman_collection.json` no Postman.  
-Configure a variável `baseUrl = http://localhost:8080` para testes locais  
-ou `baseUrl = http://<VM_IP>:8080` para testes na nuvem.
+Importe o arquivo `docs/VetFlow API.postman_collection.json` no Postman.
+
+> ⚠️ **Atenção:** O arquivo JSON original da collection contém URLs fixas apontando para `http://localhost:8080`. Antes de usar, é necessário:
+>
+> 1. No Postman, clique no ícone de **Environments** (canto superior direito) → **Add**
+> 2. Nomeie o ambiente como **VetFlow Azure**
+> 3. Adicione a variável:
+>    - **Variable:** `baseUrl`
+>    - **Initial Value:** `http://<IP_DA_VM>:8080`
+> 4. Clique em **Save** e selecione o ambiente **VetFlow Azure** no seletor
+> 5. Nas requisições da collection, substitua a URL fixa por `{{baseUrl}}/api/...`
+>
+> Para testes locais use `baseUrl = http://localhost:8080`.  
+> Para testes em nuvem use `baseUrl = http://<VM_IP>:8080`.
+
+> ⚠️ **Atenção adicional — POST e PUT de Pet:** O JSON da collection não inclui os campos `birthDate` e `weightKg`, que são obrigatórios pela API. Ao usar as requisições **Criar Pet** e **Atualizar Pet**, adicione esses campos no body:
+>
+> ```json
+> {
+>   "name": "Rex",
+>   "species": "DOG",
+>   "breed": "Labrador",
+>   "birthDate": "2022-03-15",
+>   "weightKg": 12.5,
+>   "tutorId": 1
+> }
+> ```
