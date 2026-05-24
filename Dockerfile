@@ -17,7 +17,8 @@ COPY --chown=vetflow:vetflow . /app
 # Variáveis de ambiente para conexão com o banco H2 em modo TCP
 # O hostname "h2server" é o nome do container H2 na rede Docker
 # Porta 1521 — porta TCP padrão da imagem oscarfonts/h2
-ENV SPRING_DATASOURCE_URL=jdbc:h2:tcp://h2server:1521/h2/opt/h2-data/vetflowdb
+# // indica caminho absoluto no H2
+ENV SPRING_DATASOURCE_URL=jdbc:h2:tcp://h2server:1521//opt/h2-data/vetflowdb
 ENV SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.h2.Driver
 ENV SPRING_DATASOURCE_USERNAME=sa
 ENV SPRING_DATASOURCE_PASSWORD=
