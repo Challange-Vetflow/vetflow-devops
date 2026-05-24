@@ -1,14 +1,12 @@
 version: "3.9"
 
 # VetFlow – Docker Compose
-# Padrão do professor: build de imagem customizada por serviço
 # Serviços: h2server (banco) + app (Spring Boot)
 
 services:
 
   # Banco de dados H2 em modo servidor TCP
   # Build a partir do Dockerfile.h2 local
-  # Imagem sugerida pelo professor: oscarfonts/h2
   h2server:
     build:
       context: .
@@ -17,8 +15,8 @@ services:
     container_name: vetflow-h2
     restart: unless-stopped
     ports:
-      - "9090:9090"   # H2 TCP Server (usado pela API via JDBC)
-      - "8181:8181"   # H2 Console Web (acesso pelo navegador)
+      - "9090:9090"   
+      - "8181:8181"   
     volumes:
       - h2-data:/opt/h2-data        
     networks:
