@@ -1,0 +1,11 @@
+FROM postgres:16
+
+# Nome do banco, usuário e senha padrão
+ENV POSTGRES_DB=vetflowdb
+ENV POSTGRES_USER=vetflow
+ENV POSTGRES_PASSWORD=Fiap@Cloud2026
+
+COPY script_bd.sql /docker-entrypoint-initdb.d/01-script_bd.sql
+
+# Porta padrão do PostgreSQL
+EXPOSE 5432
