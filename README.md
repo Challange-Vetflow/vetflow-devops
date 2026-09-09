@@ -43,11 +43,18 @@ vacinas e medicamentos, e serve de backend para app mobile e dashboard clínico.
 | Camada | Tecnologia |
 |--------|-----------|
 | Backend | Spring Boot 3.4, Spring Data JPA, Spring Cache |
-| Banco | H2 em modo servidor TCP (`oscarfonts/h2`) |
+| Banco | PostgreSQL 16 (containerizado — imagem `Dockerfile.postgres`) |
 | Documentação | Swagger / OpenAPI (springdoc) |
-| Container | Docker + Docker Compose |
-| Cloud | Microsoft Azure (VM Linux — `brazilsouth`) |
-| Infra como código | Azure CLI |
+| Container | Docker + Docker Compose (local) / Azure Container Registry + Azure Container Instances (nuvem) |
+| Cloud | Microsoft Azure — ACR + ACI (`brazilsouth`) |
+| Infra como código | Azure CLI (`az acr build`, `az container create`) |
+
+> **Nota de migração (Sprint 3):** o banco foi migrado de H2 para PostgreSQL
+> sem nenhuma alteração no repositório Java (pom.xml/entidades). O driver
+> JDBC do Postgres é injetado no `.jar` já compilado como um passo extra do
+> `Dockerfile` (ver seção "Como Executar"), e a conexão é configurada
+> inteiramente por variáveis de ambiente — mantendo a mudança 100% no
+> escopo de DevOps.
 
 ---
 
@@ -57,35 +64,39 @@ vacinas e medicamentos, e serve de backend para app mobile e dashboard clínico.
 
 | Componente | Descrição |
 |-----------|-----------|
-| NSG | Firewall Azure — portas 22, 80, 8080, 8181, 9090 |
-| VM Ubuntu 22.04 | Standard_D2s_v3 — região Brazil South |
-| vetflow-app | Container Spring Boot — porta 8080 — usuário vetflow (não root) |
-| vetflow-h2 | Container H2 — TCP interno :1521 (externo :9090) — Web Console :81 (externo :8181) |
-| vetflow-h2-data | Volume nomeado — persiste dados em /opt/h2-data |
-| vetflow-network | Rede bridge externa conectando os dois containers |
+| Azure Container Registry (ACR) | Registry das imagens `vetflow-api` e `vetflow-db`, geradas via `az acr build` (build ocorre na nuvem) |
+| Container Group (ACI) — `aci-vetflow` | Grupo com 2 containers na mesma rede interna (localhost) — IP público com DNS label na porta 8080 |
+| vetflow-app | Container Spring Boot — porta 8080 — usuário `vetflow` (não root) |
+| vetflow-db | Container PostgreSQL 16 — porta 5432 (interna, acessível via `localhost` pelo container da API) |
+| Azure File Share (`vetflow-db-data`) | Volume nomeado — persiste `/var/lib/postgresql/data` fora do ciclo de vida do container |
+| Storage Account | Hospeda o Azure File Share usado como volume persistente |
 
 ---
 
 ## Estrutura do Repositório
 
 ```
-vetflow-java/
-├── Dockerfile          ← Imagem da API Spring Boot
-├── Dockerfile.h2       ← Imagem do banco H2
-├── docker-compose.yml  ← Orquestra os dois containers
-├── criacao.sh          ← Script Azure CLI completo
-├── remocao.sh          ← Remove recursos Azure após avaliação
-├── pom.xml
-├── src/
-│   └── main/java/fiap/com/br/vetflow/
-│       ├── config/       SwaggerConfig
-│       ├── controller/   PetController, TutorController, ...
-│       ├── dto/
-│       ├── entity/
-│       ├── repository/
-│       └── service/
+vetflow-devops/
+├── Dockerfile           ← Imagem da API Spring Boot (com patch do driver Postgres)
+├── Dockerfile.postgres  ← Imagem do banco PostgreSQL (com script_bd.sql pré-carregado)
+├── script_bd.sql        ← DDL das tabelas core (cv_tutors, cv_pets)
+├── docker-compose.yml   ← Orquestra os dois containers (teste local)
+├── criacao.sh           ← Script Azure CLI completo (ACR + ACI)
+├── remocao.sh           ← Remove recursos Azure após avaliação
+├── comandos.sh          ← Roteiro de comandos usado na gravação do vídeo
 └── docs/
     └── VetFlow API.postman_collection.json
+
+vetflow-java/            ← Repositório separado com o código-fonte (não alterado)
+├── pom.xml
+└── src/
+    └── main/java/fiap/com/br/vetflow/
+        ├── config/       SwaggerConfig
+        ├── controller/   PetController, TutorController, ...
+        ├── dto/
+        ├── entity/
+        ├── repository/
+        └── service/
 ```
 
 ---
@@ -125,121 +136,58 @@ vetflow-java/
 
 ## Como Executar (How To Install)
 
-### Opção 1 — Local (desenvolvimento rápido)
+> **Importante:** o repositório do código Java (`vetflow-java`) não é alterado
+> em nenhum momento. A migração de banco (H2 → PostgreSQL) acontece
+> inteiramente neste repositório de DevOps: o `Dockerfile` clona o código
+> Java original, compila com o `pom.xml` original (`mvn clean package`) e,
+> **depois** de compilado, injeta o driver JDBC do PostgreSQL diretamente
+> no `.jar` (um jar Spring Boot é só um `.zip` com `BOOT-INF/lib/*.jar`, e o
+> loader inclui automaticamente tudo que está lá no classpath). A conexão
+> com o banco é configurada só por variáveis de ambiente.
+
+### Opção 1 — Docker Compose local (validar antes de subir pra nuvem)
 
 ```bash
-git clone https://github.com/Challange-Vetflow/vetflow-java.git
-cd vetflow-java
+git clone https://github.com/Challange-Vetflow/vetflow-devops.git
+cd vetflow-devops
 
-./mvnw spring-boot:run
+# Clonar o código Java para dentro da pasta (contexto de build precisa dele)
+git clone https://github.com/Challange-Vetflow/vetflow-java.git build-app
+cp Dockerfile build-app/Dockerfile
 
-# Swagger:    http://localhost:8080/swagger-ui.html
-# H2 Console: http://localhost:8080/h2-console
-#             JDBC URL: jdbc:h2:mem:vetflowdb
-```
-
----
-
-### Opção 2 — Docker (padrão do lab — build + run manual)
-
-#### Passo 1 — Criar a rede e o volume
-
-```bash
+# Criar a rede externa usada pelo compose
 docker network create vetflow-network
-docker volume create vetflow-h2-data
-```
 
-#### Passo 2 — Build e run do banco H2
-
-```bash
-# Build da imagem do banco
-docker build -t vetflow-h2-image -f Dockerfile.h2 .
-
-# Subir o container do banco em background
-docker run --name vetflow-h2 -d \
-  --network vetflow-network \
-  -p 9090:1521 \
-  -p 8181:81 \
-  -v vetflow-h2-data:/opt/h2-data \
-  vetflow-h2-image
-
-# Verificar logs
-docker logs -f vetflow-h2
-```
-
-#### Passo 2.1 — Pré-criar o banco H2 ⚠️
-
-> **Atenção:** A imagem `oscarfonts/h2` não cria o banco automaticamente por razões de segurança.  
-> É obrigatório executar este comando **uma única vez** após subir o container H2,  
-> antes de iniciar a API.
-
-```bash
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:/opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT 1;"
-# Esperado: 1 (confirma que o banco foi criado com sucesso)
-```
-
-#### Passo 3 — Build e run da API
-
-```bash
-# Build da imagem da API
-docker build -t vetflow-api-image -f Dockerfile .
-
-# Subir o container da API em background
-docker run --name vetflow-app -d \
-  --network vetflow-network \
-  -p 8080:8080 \
-  vetflow-api-image
-
-# Verificar logs
-docker logs -f vetflow-app
-```
-
-#### Passo 4 — Testar
-
-```bash
-# Listar pets
-curl http://localhost:8080/api/pets
-
-# Swagger
-# http://localhost:8080/swagger-ui.html
-
-# H2 Console Web
-# http://localhost:8181
-# JDBC URL: jdbc:h2:tcp://localhost:1521//opt/h2-data/vetflowdb
-```
-
----
-
-### Opção 3 — Docker Compose (forma simplificada)
-
-```bash
-git clone https://github.com/Challange-Vetflow/vetflow-java.git
-cd vetflow-java
-
-# Sobe banco + API com um único comando
+# Subir banco + API com um único comando
 docker compose up --build -d
 
-# Verificar containers
+# Verificar containers em background
 docker compose ps
 
-# ⚠️ Pré-criar o banco H2 (necessário na primeira execução)
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:/opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT 1;"
-# Reiniciar a API após criar o banco:
-docker restart vetflow-app
+# Testar
+curl http://localhost:8080/api/pets
+# Swagger: http://localhost:8080/swagger-ui.html
+```
 
-# Parar tudo
+Confirmar dados direto no banco:
+
+```bash
+docker exec -it vetflow-db psql -U vetflow -d vetflowdb -c "SELECT * FROM cv_pets;"
+```
+
+Parar tudo:
+
+```bash
 docker compose down
 ```
 
 ---
 
-### Opção 4 — Azure CLI (provisionamento completo em nuvem)
+### Opção 2 — Azure CLI: ACR + ACI (provisionamento completo em nuvem)
+
+Todos os recursos (imagens da API e do banco, registry, storage e os
+containers em execução) são criados via Azure CLI — nada é criado
+manualmente pelo Portal.
 
 ```bash
 # 1. Autenticar no Azure
@@ -253,16 +201,29 @@ chmod +x criacao.sh
 
 # 4. Executar o provisionamento
 ./criacao.sh
-
-# O script exibe o IP público e todos os endpoints ao final
 ```
+
+O script `criacao.sh` executa, em sequência:
+
+1. Cria o Resource Group
+2. Cria o Azure Container Registry (ACR)
+3. Builda a imagem da API via `az acr build` (clona o `vetflow-java`,
+   copia o `Dockerfile` deste repositório, build ocorre na nuvem)
+4. Builda a imagem do banco via `az acr build` (usa `Dockerfile.postgres`
+   + `script_bd.sql`)
+5. Cria a Storage Account + Azure File Share (volume nomeado do Postgres)
+6. Cria o Container Group no ACI com os dois containers (`vetflow-app` e
+   `vetflow-db`), expõe a porta 8080 publicamente com DNS label, e monta
+   o File Share em `/var/lib/postgresql/data`
+
+Ao final, o script imprime o endereço público (FQDN) e os endpoints.
 
 **Após a avaliação — remover todos os recursos:**
 
 ```bash
 chmod +x remocao.sh && ./remocao.sh
 # ou diretamente:
-az group delete --name rg-Vetflow --yes --no-wait
+az group delete --name rg-vetflow --yes --no-wait
 ```
 
 ---
@@ -270,22 +231,18 @@ az group delete --name rg-Vetflow --yes --no-wait
 ## Troubleshooting
 
 ```bash
-# Ver containers em execução
-docker ps
-
-# Logs da API
+# Local (Docker Compose)
+docker compose ps
 docker logs -f vetflow-app
-
-# Logs do banco H2
-docker logs -f vetflow-h2
-
-# Entrar no container da API
+docker logs -f vetflow-db
 docker exec -it vetflow-app bash
+docker compose down -v   # remove tudo, inclusive o volume
 
-# Remover tudo e recomeçar
-docker rm -f vetflow-app vetflow-h2
-docker volume rm vetflow-h2-data
-docker network rm vetflow-network
+# Nuvem (ACI)
+az container show --resource-group rg-vetflow --name aci-vetflow -o table
+az container logs --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-app
+az container logs --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db
+az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-app --exec-command "bash"
 ```
 
 ---
@@ -294,11 +251,13 @@ docker network rm vetflow-network
 
 | Arquivo | Descrição |
 |---------|-----------|
-| `Dockerfile` | Imagem da API Spring Boot (Maven + Java 17, usuário não-root) |
-| `Dockerfile.h2` | Imagem do banco H2 (oscarfonts/h2) |
-| `docker-compose.yml` | Orquestra API + H2 com rede e volume nomeado |
-| `criacao.sh` | Script Azure CLI completo: VM, NSG, VNet, Docker, build e deploy |
+| `Dockerfile` | Imagem da API Spring Boot (Maven + Java 17, usuário não-root, com patch do driver JDBC do Postgres) |
+| `Dockerfile.postgres` | Imagem do banco PostgreSQL 16, com `script_bd.sql` pré-carregado |
+| `script_bd.sql` | DDL das tabelas core (`cv_tutors`, `cv_pets`) + massa de dados inicial |
+| `docker-compose.yml` | Orquestra API + Postgres com rede e volume nomeado (uso local) |
+| `criacao.sh` | Script Azure CLI completo: ACR, build das imagens, Storage/File Share, Container Group (ACI) |
 | `remocao.sh` | Remove todos os recursos Azure após a avaliação |
+| `comandos.sh` | Roteiro de comandos passo a passo usado na gravação do vídeo demonstrativo |
 
 ---
 
