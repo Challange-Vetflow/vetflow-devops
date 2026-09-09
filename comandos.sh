@@ -1,43 +1,33 @@
 # ============================================================
-# FIAP DevOps Sprint 1 — 2026
+# FIAP DevOps Sprint 3 — 2026 (ACR + ACI + PostgreSQL)
 # ============================================================
 
-# ── AZURE CLOUD SHELL — Criar infraestrutura ──────────────
+# ── LOCAL — Criar infraestrutura na Azure ─────────────────
 chmod +x criacao.sh
 sed -i 's/\r$//' criacao.sh
 ./criacao.sh
+# Ao final, o script imprime o FQDN público e os endpoints
 
-# ── AZURE CLOUD SHELL — Conectar na VM ────────────────────
-ssh azureuser@<IP>
+# ── Verificar containers do grupo (App + Banco) ───────────
+az container show --resource-group rg-vetflow --name aci-vetflow --query "containers[].{name:name,state:instanceView.currentState.state}" -o table
 
-# ── DENTRO DA VM ──────────────────────────────────────────
-cd /home/azureuser/vetflow
-
-# ── STEP 5 — Verificar containers em background ───────────
-docker compose ps
-
-# ── STEP 6 — Provar que não roda como root ────────────────
-docker exec vetflow-app whoami
+# ── STEP — Provar que a API não roda como root ────────────
+az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-app --exec-command "whoami"
 # Esperado: vetflow
 
-# ── STEP 7 — Volume nomeado ───────────────────────────────
-docker volume ls
-docker volume inspect vetflow-h2-data
-
-# ── PRÉ-REQUISITO — Criar banco H2 (necessário 1x) ───────
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:/opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT 1;"
+# ── STEP — Volume nomeado (Azure File Share) ──────────────
+az storage share show --name vetflow-db-data --account-name <STORAGE_ACCOUNT>
+# Confirma que o Azure File Share existe e está montado em /var/lib/postgresql/data
 
 # ============================================================
 # CRUD via Postman + confirmação no banco após cada operação
+# (psql executado dentro do próprio container do banco)
 # ============================================================
 
-# ── STEP 9 — POST Tutor ───────────────────────────────────
+# ── STEP — POST Tutor ─────────────────────────────────────
 # No Postman:
 #   Método : POST
-#   URL    : http://<IP>:8080/api/tutors
+#   URL    : http://<FQDN>:8080/api/tutors
 #   Body (raw JSON):
 # {
 #   "name": "Carlos Silva",
@@ -47,15 +37,13 @@ docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
 # Esperado: 201 Created
 
 # Confirmar no banco:
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:tcp://localhost:1521//opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT * FROM cv_tutors;"
+az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db \
+  --exec-command "psql -U vetflow -d vetflowdb -c \"SELECT * FROM cv_tutors;\""
 
-# ── STEP 10 — POST Pet 1 (Rex) ────────────────────────────
+# ── STEP — POST Pet 1 (Rex) ───────────────────────────────
 # No Postman:
 #   Método : POST
-#   URL    : http://<IP>:8080/api/pets
+#   URL    : http://<FQDN>:8080/api/pets
 #   Body (raw JSON):
 # {
 #   "name": "Rex",
@@ -68,15 +56,13 @@ docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
 # Esperado: 201 Created
 
 # Confirmar no banco:
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:tcp://localhost:1521//opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT * FROM cv_pets;"
+az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db \
+  --exec-command "psql -U vetflow -d vetflowdb -c \"SELECT * FROM cv_pets;\""
 
-# ── STEP 11 — POST Pet 2 (Mia) ────────────────────────────
+# ── STEP — POST Pet 2 (Mia) ───────────────────────────────
 # No Postman:
 #   Método : POST
-#   URL    : http://<IP>:8080/api/pets
+#   URL    : http://<FQDN>:8080/api/pets
 #   Body (raw JSON):
 # {
 #   "name": "Mia",
@@ -89,22 +75,20 @@ docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
 # Esperado: 201 Created
 
 # Confirmar no banco:
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:tcp://localhost:1521//opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT * FROM cv_pets;"
+az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db \
+  --exec-command "psql -U vetflow -d vetflowdb -c \"SELECT * FROM cv_pets;\""
 
-# ── STEP 12 — GET Pets ────────────────────────────────────
+# ── STEP — GET Pets ────────────────────────────────────────
 # No Postman:
 #   Método : GET
-#   URL    : http://<IP>:8080/api/pets
+#   URL    : http://<FQDN>:8080/api/pets
 #   Sem body
 # Esperado: 200 OK com Rex e Mia no array
 
-# ── STEP 13 — PUT Pet (atualizar Rex) ─────────────────────
+# ── STEP — PUT Pet (atualizar Rex) ────────────────────────
 # No Postman:
 #   Método : PUT
-#   URL    : http://<IP>:8080/api/pets/1
+#   URL    : http://<FQDN>:8080/api/pets/1
 #   Body (raw JSON):
 # {
 #   "name": "Rex",
@@ -117,34 +101,25 @@ docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
 # Esperado: 200 OK com "breed": "Golden Retriever"
 
 # Confirmar no banco:
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:tcp://localhost:1521//opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT * FROM cv_pets WHERE ID = 1;"
+az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db \
+  --exec-command "psql -U vetflow -d vetflowdb -c \"SELECT * FROM cv_pets WHERE id = 1;\""
 
-# ── STEP 14 — DELETE Pet (remover Rex) ────────────────────
+# ── STEP — DELETE Pet (remover Rex) ───────────────────────
 # No Postman:
 #   Método : DELETE
-#   URL    : http://<IP>:8080/api/pets/1
+#   URL    : http://<FQDN>:8080/api/pets/1
 #   Sem body
 # Esperado: 204 No Content
 
 # Confirmar no banco:
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:tcp://localhost:1521//opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT * FROM cv_pets;"
+az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db \
+  --exec-command "psql -U vetflow -d vetflowdb -c \"SELECT * FROM cv_pets;\""
 
-# ── STEP 15 — JOIN final ──────────────────────────────────
-docker exec vetflow-h2 java -cp /opt/h2/bin/h2-2.1.214.jar org.h2.tools.Shell \
-  -url "jdbc:h2:tcp://localhost:1521//opt/h2-data/vetflowdb" \
-  -user sa -password "" \
-  -sql "SELECT p.id, p.name AS pet, p.species, p.breed, t.name AS tutor, t.email FROM cv_pets p JOIN cv_tutors t ON t.id = p.tutor_id;"
+# ── STEP — JOIN final ──────────────────────────────────────
+az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db \
+  --exec-command "psql -U vetflow -d vetflowdb -c \"SELECT p.id, p.name AS pet, p.species, p.breed, t.name AS tutor, t.email FROM cv_pets p JOIN cv_tutors t ON t.id = p.tutor_id;\""
 
-# ── SAIR DA VM ────────────────────────────────────────────
-exit
-
-# ── AZURE CLOUD SHELL — Remoção ───────────────────────────
+# ── LOCAL — Remoção ────────────────────────────────────────
 chmod +x remocao.sh
 ./remocao.sh
 # Quando perguntar "Tem certeza? (s/N):" — digite s e Enter
