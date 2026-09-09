@@ -1,27 +1,25 @@
 version: "3.9"
 
-# VetFlow – Docker Compose (Versão com Rede Externa)
-# Serviços: h2server (banco) + app (Spring Boot)
-
 services:
 
-  # Banco de dados H2 em modo servidor TCP
-  h2server:
+  dbserver:
     build:
       context: .
-      dockerfile: Dockerfile.h2
-    image: vetflow-h2-image
-    container_name: vetflow-h2
+      dockerfile: Dockerfile.postgres
+    image: vetflow-db-image
+    container_name: vetflow-db
     restart: unless-stopped
+    environment:
+      POSTGRES_DB: vetflowdb
+      POSTGRES_USER: vetflow
+      POSTGRES_PASSWORD: Fiap@Cloud2026
     ports:
-      - "9090:1521"   # TCP externo:interno
-      - "8181:81"     # Web Console externo:interno
+      - "5432:5432"
     volumes:
-      - h2-data:/opt/h2-data
+      - db-data:/var/lib/postgresql/data
     networks:
       - vetflow-network
 
-  # Aplicação Spring Boot (VetFlow API)
   app:
     build:
       context: .
@@ -29,19 +27,21 @@ services:
     image: vetflow-api-image
     container_name: vetflow-app
     restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://dbserver:5432/vetflowdb
+      SPRING_DATASOURCE_USERNAME: vetflow
+      SPRING_DATASOURCE_PASSWORD: Fiap@Cloud2026
     ports:
       - "8080:8080"
     depends_on:
-      - h2server
+      - dbserver
     networks:
       - vetflow-network
 
-# Volume nomeado para persistência
 volumes:
-  h2-data:
-    name: vetflow-h2-data
+  db-data:
+    name: vetflow-db-data
 
-# Configuração da Rede como EXTERNA
 networks:
   vetflow-network:
     external: true
