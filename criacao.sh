@@ -1,226 +1,188 @@
+#!/bin/bash
 # =============================================================
-# VetFlow – Script Azure CLI Completo
+# VetFlow – Script Azure CLI Completo (Sprint 3)
 # Challenge FIAP 2026 – DevOps Tools & Cloud Computing
+# Opção escolhida: ACR + ACI (App e Banco 100% containerizados, todos os recursos criados via Azure CLI)
 # =============================================================
-
-# Variáveis principais
 # chmod +x criacao.sh
 # sed -i 's/\r$//' criacao.sh
 # ./criacao.sh
+set -e
 
+# ── Variáveis principais ─────────────────────────────────────
 GRUPO=vetflow
 LOCATION=brazilsouth
-USER=azureuser
-PASSWORD='Fiap@Cloud2026'
 
 RG=rg-$GRUPO
-VNET=vnet-$GRUPO
-SUBNET=subnet-$GRUPO
-NSG=nsg-$GRUPO
-VM=vm-$GRUPO
+SUFFIX=$RANDOM                         
+ACR=acr${GRUPO}${SUFFIX}               
+STORAGE=st${GRUPO}${SUFFIX}            
+SHARE=${GRUPO}-db-data                 
+ACI=aci-${GRUPO}
+DNS_LABEL=${GRUPO}-${SUFFIX}
+
+DB_NAME=vetflowdb
+DB_USER=vetflow
+DB_PASSWORD='Fiap@Cloud2026'
 
 # Repositórios do projeto
-REPO_JAVA_URL="https://github.com/Challange-Vetflow/vetflow-java"   
+REPO_JAVA_URL="https://github.com/Challange-Vetflow/vetflow-java.git"
 REPO_DEVOPS_URL="https://github.com/Challange-Vetflow/vetflow-devops.git"
 
-# 1. Resource Group
+WORKDIR=$(mktemp -d)
+
+echo " 1) Resource Group"
 az group create \
   --name "$RG" \
   --location "$LOCATION" \
   --tags owner=$GRUPO environment=dev cost-center=fiap
 
-# 2. VNet e Subnet
-az network vnet create \
+echo " 2) Azure Container Registry (ACR)"
+az acr create \
   --resource-group "$RG" \
-  --name "$VNET" \
-  --address-prefix 10.10.0.0/16 \
-  --subnet-name "$SUBNET" \
-  --subnet-prefix 10.10.1.0/24 \
+  --name "$ACR" \
+  --sku Basic \
+  --admin-enabled true \
   --tags owner=$GRUPO environment=dev cost-center=fiap
 
-# 3. NSG
-az network nsg create \
+ACR_LOGIN_SERVER=$(az acr show --name "$ACR" --query loginServer --output tsv)
+ACR_USER=$(az acr credential show --name "$ACR" --query username --output tsv)
+ACR_PASS=$(az acr credential show --name "$ACR" --query "passwords[0].value" --output tsv)
+
+echo " 3) Montando contexto de build (repo Java + repo DevOps)"
+git clone "$REPO_JAVA_URL" "$WORKDIR/build-app"
+cp Dockerfile "$WORKDIR/build-app/Dockerfile"
+
+echo " 4) Build da imagem da API (via ACR Tasks — build ocorre na nuvem)"
+az acr build \
+  --registry "$ACR" \
+  --image vetflow-api:v1 \
+  "$WORKDIR/build-app"
+
+echo " 5) Build da imagem do banco PostgreSQL (via ACR Tasks)"
+az acr build \
+  --registry "$ACR" \
+  --image vetflow-db:v1 \
+  .
+
+echo " 6) Storage Account + Azure File Share (volume nomeado do banco)"
+az storage account create \
   --resource-group "$RG" \
-  --name "$NSG" \
+  --name "$STORAGE" \
+  --location "$LOCATION" \
+  --sku Standard_LRS \
   --tags owner=$GRUPO environment=dev cost-center=fiap
 
-# 4. Regras do NSG
-az network nsg rule create \
+STORAGE_KEY=$(az storage account keys list \
   --resource-group "$RG" \
-  --nsg-name "$NSG" \
-  --name allow-ssh \
-  --protocol Tcp \
-  --priority 1000 \
-  --destination-port-range 22 \
-  --access Allow
+  --account-name "$STORAGE" \
+  --query "[0].value" --output tsv)
 
-az network nsg rule create \
-  --resource-group "$RG" \
-  --nsg-name "$NSG" \
-  --name allow-http \
-  --protocol Tcp \
-  --priority 1001 \
-  --destination-port-range 80 \
-  --access Allow
+az storage share create \
+  --name "$SHARE" \
+  --account-name "$STORAGE" \
+  --account-key "$STORAGE_KEY"
 
-az network nsg rule create \
-  --resource-group "$RG" \
-  --nsg-name "$NSG" \
-  --name allow-api-8080 \
-  --protocol Tcp \
-  --priority 1002 \
-  --destination-port-range 8080 \
-  --access Allow
-
-az network nsg rule create \
-  --resource-group "$RG" \
-  --nsg-name "$NSG" \
-  --name allow-h2-console \
-  --protocol Tcp \
-  --priority 1003 \
-  --destination-port-range 8181 \
-  --access Allow
-
-az network nsg rule create \
-  --resource-group "$RG" \
-  --nsg-name "$NSG" \
-  --name allow-h2-tcp \
-  --protocol Tcp \
-  --priority 1004 \
-  --destination-port-range 9090 \
-  --access Allow
-
-az network vnet subnet update \
-  --resource-group "$RG" \
-  --vnet-name "$VNET" \
-  --name "$SUBNET" \
-  --network-security-group "$NSG"
-
-# 5. Criar VM Ubuntu
-az vm create \
-  --resource-group "$RG" \
-  --name "$VM" \
-  --image Ubuntu2204 \
-  --admin-username "$USER" \
-  --admin-password "$PASSWORD" \
-  --authentication-type password \
-  --size Standard_D2s_v3 \
-  --vnet-name "$VNET" \
-  --subnet "$SUBNET" \
-  --nsg "$NSG" \
-  --public-ip-sku Standard \
-  --tags owner=$GRUPO environment=dev cost-center=fiap
-
-VM_IP=$(az vm show \
-  --resource-group "$RG" \
-  --name "$VM" \
-  --show-details \
-  --query publicIps \
-  --output tsv)
-
-# 6. Instalar Docker, Git e Nano
-az vm run-command invoke \
-  --resource-group "$RG" \
-  --name "$VM" \
-  --command-id RunShellScript \
-  --scripts '
-    export DEBIAN_FRONTEND=noninteractive
-    echo ">>> Atualizando pacotes..."
-    sudo apt-get update -y
-    sudo apt-get install -y ca-certificates curl git nano
-
-    echo ">>> Instalando Docker..."
-    sudo install -m 0755 -d /etc/apt/keyrings
-    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-         -o /etc/apt/keyrings/docker.asc
-    sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-    sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
+echo " 7) Container Group no ACI (App + Banco, ambos via CLI)"
+cat > "$WORKDIR/containergroup.yaml" << EOF
+apiVersion: '2021-10-01'
+location: $LOCATION
+name: $ACI
+properties:
+  osType: Linux
+  restartPolicy: Always
+  ipAddress:
+    type: Public
+    dnsNameLabel: $DNS_LABEL
+    ports:
+    - protocol: tcp
+      port: 8080
+  containers:
+  - name: vetflow-db
+    properties:
+      image: $ACR_LOGIN_SERVER/vetflow-db:v1
+      resources:
+        requests:
+          cpu: 1
+          memoryInGb: 1.5
+      ports:
+      - port: 5432
+      environmentVariables:
+      - name: POSTGRES_DB
+        value: $DB_NAME
+      - name: POSTGRES_USER
+        value: $DB_USER
+      - name: POSTGRES_PASSWORD
+        secureValue: '$DB_PASSWORD'
+      volumeMounts:
+      - name: dbdata
+        mountPath: /var/lib/postgresql/data
+  - name: vetflow-app
+    properties:
+      image: $ACR_LOGIN_SERVER/vetflow-api:v1
+      resources:
+        requests:
+          cpu: 1
+          memoryInGb: 1.5
+      ports:
+      - port: 8080
+      environmentVariables:
+      - name: SPRING_DATASOURCE_URL
+        value: jdbc:postgresql://localhost:5432/$DB_NAME
+      - name: SPRING_DATASOURCE_USERNAME
+        value: $DB_USER
+      - name: SPRING_DATASOURCE_PASSWORD
+        secureValue: '$DB_PASSWORD'
+  imageRegistryCredentials:
+  - server: $ACR_LOGIN_SERVER
+    username: $ACR_USER
+    password: '$ACR_PASS'
+  volumes:
+  - name: dbdata
+    azureFile:
+      shareName: $SHARE
+      storageAccountName: $STORAGE
+      storageAccountKey: '$STORAGE_KEY'
+tags:
+  owner: $GRUPO
+type: Microsoft.ContainerInstance/containerGroups
 EOF
 
-    sudo apt-get update -y
-    sudo apt-get install -y \
-      docker-ce docker-ce-cli containerd.io \
-      docker-buildx-plugin docker-compose-plugin
-
-    sudo systemctl enable docker
-    sudo systemctl start docker
-
-    # Remove necessidade de sudo no docker (padrão do professor)
-    sudo usermod -aG docker azureuser && newgrp docker
-
-    echo ">>> Docker instalado!"
-    docker --version
-    docker compose version
-  '
-
-# 7. Clonar repositório DevOps, trazer o código Java, fazer build e subir
-az vm run-command invoke \
+az container create \
   --resource-group "$RG" \
-  --name "$VM" \
-  --command-id RunShellScript \
-  --scripts "
-    sudo -u azureuser bash -c '
-      cd /home/azureuser
-      
-      echo \">>> Clonando repositório de DevOps (Infra)...\"
-      git clone $REPO_DEVOPS_URL vetflow-infra || (cd vetflow-infra && git pull)
-      
-      echo \">>> Clonando repositório da API Java...\"
-      git clone $REPO_JAVA_URL vetflow || (cd vetflow && git pull)
-      
-      echo \">>> Unificando arquivos de configuração (docker-compose)...\"
-      # Copia o docker-compose.yml e outros arquivos estruturais para a pasta principal do roteiro
-      cp -r /home/azureuser/vetflow-infra/* /home/azureuser/vetflow/
-      
-      cd /home/azureuser/vetflow
+  --file "$WORKDIR/containergroup.yaml"
 
-      echo \">>> Criando volume nomeado para persistência do H2...\"
-      docker volume create vetflow-h2-data
+FQDN=$(az container show \
+  --resource-group "$RG" \
+  --name "$ACI" \
+  --query ipAddress.fqdn --output tsv)
 
-      echo \">>> Criando rede interna dos containers...\"
-      docker network create vetflow-network || echo \"Rede já existe, continuando...\"
+cat > .ultimo-deploy.env << EOF
+RG=$RG
+ACR=$ACR
+STORAGE=$STORAGE
+ACI=$ACI
+FQDN=$FQDN
+EOF
 
-      echo \">>> Build da imagem do banco H2 (docker build)...\"
-      docker build -t vetflow-h2-image -f Dockerfile.h2 .
+rm -rf "$WORKDIR"
 
-      echo \">>> Build da imagem da API Spring Boot (docker build)...\"
-      docker build -t vetflow-api-image -f Dockerfile .
-
-      echo \">>> Subindo containers em background via Docker Compose...\"
-      docker compose up -d
-
-      echo \">>> Status dos containers:\"
-      docker compose ps
-    '
-  "
-
-# Resumo final
-echo ""
 echo "============================================="
 echo " DEPLOY CONCLUÍDO COM SUCESSO!"
 echo "============================================="
-echo " IP Público da VM : $VM_IP"
+echo " Resource Group : $RG"
+echo " ACR             : $ACR_LOGIN_SERVER"
+echo " Container Group : $ACI"
+echo " Endereço público: $FQDN"
 echo ""
 echo " Endpoints disponíveis:"
-echo "   API VetFlow   -> http://$VM_IP:8080/api/pets"
-echo "   Swagger UI    -> http://$VM_IP:8080/swagger-ui.html"
-echo "   H2 Console    -> http://$VM_IP:8181"
-echo "     JDBC URL    -> jdbc:h2:tcp://$VM_IP:9090/h2/opt/h2-data/vetflowdb"
-echo ""
-echo " Para acessar a VM:"
-echo "   ssh $USER@$VM_IP"
+echo "   API VetFlow -> http://$FQDN:8080/api/pets"
+echo "   Swagger UI  -> http://$FQDN:8080/swagger-ui.html"
 echo ""
 echo " Para verificar logs:"
-echo "   docker logs -f vetflow-app"
-echo "   docker logs -f vetflow-h2"
+echo "   az container logs --resource-group $RG --name $ACI --container-name vetflow-app"
+echo "   az container logs --resource-group $RG --name $ACI --container-name vetflow-db"
 echo ""
-echo " ATENÇÃO: Ao concluir a avaliação, DELETE os recursos:"
-echo "   az group delete --name $RG --yes --no-wait"
+echo " ATENÇÃO: Ao concluir, DELETE os recursos:"
+echo "   ./remocao.sh"
 echo "============================================="
