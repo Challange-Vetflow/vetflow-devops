@@ -10,12 +10,12 @@
 #                        (o enunciado pune isso explicitamente)
 #
 # NOTA: "bash" sozinho pode apontar pro bash.exe do WSL (que pode
-# nao estar configurado direito). Por isso os comandos abaixo usam
-# o caminho completo do bash do Git for Windows. Se voce instalou
-# o Git em outro local, ajuste o caminho nas linhas marcadas.
+# nao estar configurado direito). Por isso os comandos abaixo chamam
+# o caminho COMPLETO do bash do Git for Windows em toda linha que
+# precisa dele - nao depende de nenhuma linha anterior ter rodado.
+# Se voce instalou o Git em outro local, ajuste TODAS as linhas que
+# comecam com "C:\Program Files\Git\bin\bash.exe".
 # ============================================================
-
-set GITBASH="C:\Program Files\Git\bin\bash.exe"
 
 
 # ============================================================
@@ -54,8 +54,8 @@ az account show --query "{subscription:name, user:user.name}" -o table
 # ============================================================
 # [GRAVANDO] PASSO 3 — Criar toda a infraestrutura na Azure
 # ============================================================
-%GITBASH% -c "sed -i 's/\r$//' criacao.sh remocao.sh"
-%GITBASH% criacao.sh
+"C:\Program Files\Git\bin\bash.exe" -c "sed -i 's/\r$//' criacao.sh remocao.sh"
+"C:\Program Files\Git\bin\bash.exe" criacao.sh
 # Pede a senha do banco no terminal (não aparece na tela ao digitar).
 # >>> ANOTE o FQDN impresso no final <<<, você vai colar ele no Passo 5.
 
@@ -116,7 +116,7 @@ az container exec --resource-group rg-vetflow --name aci-vetflow --container-nam
 # ============================================================
 # [GRAVANDO] PASSO 7 — Encerramento
 # ============================================================
-%GITBASH% remocao.sh
+"C:\Program Files\Git\bin\bash.exe" remocao.sh
 # "Tem certeza? (s/N):" -> digite s e Enter
 
 az group show --name rg-vetflow
