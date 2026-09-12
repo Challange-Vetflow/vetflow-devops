@@ -23,7 +23,20 @@ DNS_LABEL=${GRUPO}-${SUFFIX}
 
 DB_NAME=vetflowdb
 DB_USER=vetflow
-DB_PASSWORD='Fiap@Cloud2026'
+
+# Senha do banco NUNCA fica craveada no script.
+# Prioridade: variável de ambiente DB_PASSWORD -> arquivo .env local -> pede no terminal.
+if [ -z "$DB_PASSWORD" ] && [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+fi
+if [ -z "$DB_PASSWORD" ]; then
+  read -s -p "Senha do banco Postgres (não será exibida): " DB_PASSWORD
+  echo ""
+fi
+if [ -z "$DB_PASSWORD" ]; then
+  echo "ERRO: DB_PASSWORD não pode ser vazia."
+  exit 1
+fi
 
 # Repositórios do projeto
 REPO_JAVA_URL="https://github.com/Challange-Vetflow/vetflow-java.git"
@@ -49,9 +62,10 @@ ACR_LOGIN_SERVER=$(az acr show --name "$ACR" --query loginServer --output tsv)
 ACR_USER=$(az acr credential show --name "$ACR" --query username --output tsv)
 ACR_PASS=$(az acr credential show --name "$ACR" --query "passwords[0].value" --output tsv)
 
-echo " 3) Montando contexto de build (repo Java + repo DevOps)"
+echo " 3) Montando contexto de build (repo Java + patches de DevOps)"
 git clone "$REPO_JAVA_URL" "$WORKDIR/build-app"
 cp Dockerfile "$WORKDIR/build-app/Dockerfile"
+cp -r db-patches "$WORKDIR/build-app/db-patches"
 
 echo " 4) Build da imagem da API (via ACR Tasks — build ocorre na nuvem)"
 az acr build \
