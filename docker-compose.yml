@@ -12,7 +12,7 @@ services:
     environment:
       POSTGRES_DB: vetflowdb
       POSTGRES_USER: vetflow
-      POSTGRES_PASSWORD: Fiap@Cloud2026
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -22,7 +22,10 @@ services:
 
   app:
     build:
-      context: .
+      # Contexto = pasta com o código-fonte do vetflow-java clonado localmente.
+      # Ver README "Como Executar": clone o vetflow-java para ./build-app
+      # e copie Dockerfile + db-patches/ para dentro dela antes do build.
+      context: ./build-app
       dockerfile: Dockerfile
     image: vetflow-api-image
     container_name: vetflow-app
@@ -30,7 +33,7 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://dbserver:5432/vetflowdb
       SPRING_DATASOURCE_USERNAME: vetflow
-      SPRING_DATASOURCE_PASSWORD: Fiap@Cloud2026
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
     ports:
       - "8080:8080"
     depends_on:
