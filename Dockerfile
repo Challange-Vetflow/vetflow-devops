@@ -12,6 +12,11 @@
 FROM maven:3.9-eclipse-temurin-17 AS builder
 
 ARG POSTGRES_DRIVER_VERSION=42.7.4
+# Flyway 10+ separou o suporte a cada banco em módulos plugáveis. O H2 continua
+# embutido no flyway-core, mas o Postgres não — por isso essa dependência
+# extra também precisa ser injetada (mesma versão do flyway-core usado pelo
+# Spring Boot 3.4.5, senão dá erro de incompatibilidade de versão).
+ARG FLYWAY_POSTGRES_VERSION=10.20.1
 
 RUN apt-get update && apt-get install -y --no-install-recommends unzip zip curl \
     && rm -rf /var/lib/apt/lists/*
@@ -23,16 +28,21 @@ COPY . /build
 
 RUN mvn -q clean package -DskipTests
 
-# Reempacota o jar: injeta o driver Postgres e troca os 2 SQLs do Flyway
+# Reempacota o jar: injeta o driver Postgres e troca os 2 SQLs do Flyway.
+# -0 no zip = sem compressão. Spring Boot 3.2+ lê BOOT-INF/lib/*.jar direto
+# pelo offset do zip, sem descompactar; se o zip recomprimir esses jars
+# aninhados, o loader não consegue mais lê-los -> NoClassDefFoundError.
 COPY db-patches/V1__base_schema.sql db-patches/V2__create_users_table.sql /tmp/db-patches/
 RUN mkdir -p /tmp/repack \
     && cd /tmp/repack \
     && unzip -q /build/target/vetflow-0.0.1-SNAPSHOT.jar \
     && curl -sL -o BOOT-INF/lib/postgresql-${POSTGRES_DRIVER_VERSION}.jar \
        "https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRES_DRIVER_VERSION}/postgresql-${POSTGRES_DRIVER_VERSION}.jar" \
+    && curl -sL -o BOOT-INF/lib/flyway-database-postgresql-${FLYWAY_POSTGRES_VERSION}.jar \
+       "https://repo1.maven.org/maven2/org/flywaydb/flyway-database-postgresql/${FLYWAY_POSTGRES_VERSION}/flyway-database-postgresql-${FLYWAY_POSTGRES_VERSION}.jar" \
     && cp /tmp/db-patches/V1__base_schema.sql BOOT-INF/classes/db/migration/V1__base_schema.sql \
     && cp /tmp/db-patches/V2__create_users_table.sql BOOT-INF/classes/db/migration/V2__create_users_table.sql \
-    && zip -qr /build/target/vetflow-patched.jar .
+    && zip -qr -X -0 /build/target/vetflow-patched.jar .
 
 # ---------- Stage 2: runtime (imagem final, sem Maven/JDK completo) ----------
 FROM eclipse-temurin:17-jre-jammy
