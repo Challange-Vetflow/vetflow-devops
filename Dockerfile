@@ -1,44 +1,58 @@
-FROM maven:3.9-eclipse-temurin-17
+# =============================================================
+# VetFlow API — imagem multi-stage (build + runtime)
+# O repositório vetflow-java NÃO é alterado em nenhum momento.
+# Este Dockerfile: 1) compila o jar original, 2) injeta o driver
+# JDBC do PostgreSQL (que não está no pom.xml do Java), 3) troca
+# os 2 arquivos de migration do Flyway pela versão compatível com
+# Postgres (ver db-patches/, mesmo conteúdo, só sintaxe SQL trocada).
+# Nenhuma classe, dependência do pom.xml ou dado é alterado além disso.
+# =============================================================
 
-# Driver JDBC do Postgres a injetar no jar (pode ser sobrescrito com --build-arg)
+# ---------- Stage 1: build ----------
+FROM maven:3.9-eclipse-temurin-17 AS builder
+
 ARG POSTGRES_DRIVER_VERSION=42.7.4
 
-# Ferramentas para reempacotar o jar (precisa ser como root)
 RUN apt-get update && apt-get install -y --no-install-recommends unzip zip curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Cria usuário sem privilégios administrativos com home directory
-RUN groupadd -r vetflow && useradd -r -g vetflow -d /home/vetflow -m vetflow
+WORKDIR /build
+# Contexto de build = pasta com o código-fonte do vetflow-java clonado
+# (ver README / criacao.sh: git clone vetflow-java build-app)
+COPY . /build
 
-# Cria a pasta /app, o diretório home e o cache do Maven
-RUN mkdir -p /app && mkdir -p /home/vetflow/.m2 && chown -R vetflow:vetflow /app /home/vetflow
+RUN mvn -q clean package -DskipTests
+
+# Reempacota o jar: injeta o driver Postgres e troca os 2 SQLs do Flyway
+COPY db-patches/V1__base_schema.sql db-patches/V2__create_users_table.sql /tmp/db-patches/
+RUN mkdir -p /tmp/repack \
+    && cd /tmp/repack \
+    && unzip -q /build/target/vetflow-0.0.1-SNAPSHOT.jar \
+    && curl -sL -o BOOT-INF/lib/postgresql-${POSTGRES_DRIVER_VERSION}.jar \
+       "https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRES_DRIVER_VERSION}/postgresql-${POSTGRES_DRIVER_VERSION}.jar" \
+    && cp /tmp/db-patches/V1__base_schema.sql BOOT-INF/classes/db/migration/V1__base_schema.sql \
+    && cp /tmp/db-patches/V2__create_users_table.sql BOOT-INF/classes/db/migration/V2__create_users_table.sql \
+    && zip -qr /build/target/vetflow-patched.jar .
+
+# ---------- Stage 2: runtime (imagem final, sem Maven/JDK completo) ----------
+FROM eclipse-temurin:17-jre-jammy
+
+# Usuário sem privilégios administrativos
+RUN groupadd -r vetflow && useradd -r -g vetflow -m vetflow
 
 WORKDIR /app
+COPY --from=builder --chown=vetflow:vetflow /build/target/vetflow-patched.jar /app/vetflow.jar
 
-COPY --chown=vetflow:vetflow . /app
-
-# Variáveis de ambiente para conexão com o banco PostgreSQL
-ENV SPRING_DATASOURCE_URL=jdbc:postgresql://dbserver:5432/vetflowdb
+# Configuração fixa (não sensível) do datasource Postgres.
+# Usuário/senha/host do banco SEMPRE vêm de variáveis de ambiente
+# passadas em runtime (docker-compose.yml / --env-file / ACI
+# environmentVariables com secureValue) — nunca com valor default aqui.
 ENV SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
-ENV SPRING_DATASOURCE_USERNAME=vetflow
-ENV SPRING_DATASOURCE_PASSWORD=Fiap@Cloud2026
 ENV SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
-ENV SPRING_JPA_HIBERNATE_DDL_AUTO=update
 ENV SPRING_H2_CONSOLE_ENABLED=false
 ENV SPRING_CACHE_TYPE=simple
 
-# Porta exposta pela aplicação Spring Boot
 EXPOSE 8080
-
 USER vetflow
 
-RUN mvn clean package -DskipTests
-
-RUN mkdir -p /tmp/repack \
-    && unzip -q target/vetflow-0.0.1-SNAPSHOT.jar -d /tmp/repack \
-    && curl -sL -o /tmp/repack/BOOT-INF/lib/postgresql-${POSTGRES_DRIVER_VERSION}.jar \
-       "https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRES_DRIVER_VERSION}/postgresql-${POSTGRES_DRIVER_VERSION}.jar" \
-    && cd /tmp/repack && zip -qr /app/target/vetflow-0.0.1-SNAPSHOT.jar . \
-    && rm -rf /tmp/repack
-
-CMD ["java", "-jar", "target/vetflow-0.0.1-SNAPSHOT.jar"]
+CMD ["java", "-jar", "/app/vetflow.jar"]
