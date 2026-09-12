@@ -1,0 +1,164 @@
+{
+  "info": {
+    "name": "VetFlow API (Sprint 3)",
+    "description": "Login + CRUD de Tutors e Pets contra a API na nuvem (ACR+ACI/Postgres).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"vet@vetflow.com\",\n  \"senha\": \"senha123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Me (checar sessão)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tutors",
+      "item": [
+        {
+          "name": "Listar Tutors",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/tutors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutors"]
+            }
+          }
+        },
+        {
+          "name": "Criar Tutor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Carlos Silva\",\n  \"email\": \"carlos.silva.novo@email.com\",\n  \"phone\": \"11911111111\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutors"]
+            }
+          }
+        },
+        {
+          "name": "Atualizar Tutor",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Carlos Silva\",\n  \"email\": \"carlos.silva.novo@email.com\",\n  \"phone\": \"11922223333\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutors/{{tutorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutors", "{{tutorId}}"]
+            }
+          }
+        },
+        {
+          "name": "Remover Tutor",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/tutors/{{tutorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutors", "{{tutorId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pets",
+      "item": [
+        {
+          "name": "Listar Pets",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/pets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "pets"]
+            }
+          }
+        },
+        {
+          "name": "Criar Pet",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rex\",\n  \"species\": \"DOG\",\n  \"breed\": \"Labrador\",\n  \"birthDate\": \"2022-03-15\",\n  \"weightKg\": 12.5,\n  \"tutorId\": {{tutorId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "pets"]
+            }
+          }
+        },
+        {
+          "name": "Atualizar Pet",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rex\",\n  \"species\": \"DOG\",\n  \"breed\": \"Golden Retriever\",\n  \"birthDate\": \"2022-03-15\",\n  \"weightKg\": 13.0,\n  \"tutorId\": {{tutorId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pets/{{petId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "pets", "{{petId}}"]
+            }
+          }
+        },
+        {
+          "name": "Remover Pet",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/pets/{{petId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "pets", "{{petId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "tutorId", "value": "1" },
+    { "key": "petId", "value": "1" }
+  ]
+}
