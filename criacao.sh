@@ -77,6 +77,7 @@ echo " 5) Build da imagem do banco PostgreSQL (via ACR Tasks)"
 az acr build \
   --registry "$ACR" \
   --image vetflow-db:v1 \
+  --file Dockerfile.postgres \
   .
 
 echo " 6) Storage Account + Azure File Share (volume nomeado do banco)"
