@@ -1,17 +1,7 @@
--- =============================================================
--- VetFlow – DDL das tabelas CORE (Sprint 3 – DevOps Tools & Cloud Computing)
--- Banco: PostgreSQL 16
---
--- Este arquivo é DOCUMENTAÇÃO do schema exigida pelo item 3.3 do
--- enunciado. Ele NÃO precisa ser executado manualmente: o schema real
--- é criado automaticamente pelo Flyway assim que o container da API
--- sobe e se conecta neste banco (migrations V1/V2/V3, com 2 pequenos
--- ajustes de sintaxe SQL para rodar em Postgres em vez de H2 — ver
--- db-patches/ e o Dockerfile). O conteúdo abaixo reflete exatamente
--- o schema resultante dessas migrations.
---
--- O vetflow-java (código-fonte) não é alterado em nenhum momento.
--- =============================================================
+-- VetFlow - DDL das tabelas CORE (Sprint 3). Banco: PostgreSQL 16.
+-- Documentacao do schema (item 3.3). Criado automaticamente pelo Flyway
+-- na 1a conexao da API (migrations V1/V2/V3, ajustadas p/ Postgres em
+-- db-patches/). vetflow-java nao e alterado.
 
 -- Tutores (donos dos pets)
 CREATE TABLE cv_tutors (

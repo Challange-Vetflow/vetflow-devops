@@ -22,9 +22,8 @@ services:
 
   app:
     build:
-      # Contexto = pasta com o código-fonte do vetflow-java clonado localmente.
-      # Ver README "Como Executar": clone o vetflow-java para ./build-app
-      # e copie Dockerfile + db-patches/ para dentro dela antes do build.
+      # Contexto = vetflow-java clonado localmente (ver README: git clone
+      # para ./build-app, copiar Dockerfile + db-patches/ para dentro antes)
       context: ./build-app
       dockerfile: Dockerfile
     image: vetflow-api-image

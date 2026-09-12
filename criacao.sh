@@ -1,31 +1,21 @@
 #!/bin/bash
-# =============================================================
-# VetFlow – Script Azure CLI Completo (Sprint 3)
-# Challenge FIAP 2026 – DevOps Tools & Cloud Computing
-# Opção escolhida: ACR + ACI (App e Banco 100% containerizados, todos os recursos criados via Azure CLI)
-# =============================================================
-# chmod +x criacao.sh
-# sed -i 's/\r$//' criacao.sh
-# ./criacao.sh
+# VetFlow - Script Azure CLI Completo (Sprint 3 - ACR + ACI)
+# Uso: sed -i 's/\r$//' criacao.sh && chmod +x criacao.sh && ./criacao.sh
 set -e
 
-# ── Variáveis principais ─────────────────────────────────────
 GRUPO=vetflow
 LOCATION=eastus
 
 RG=rg-$GRUPO
-SUFFIX=$RANDOM                         
-ACR=acr${GRUPO}${SUFFIX}               
-STORAGE=st${GRUPO}${SUFFIX}            
-SHARE=${GRUPO}-db-data                 
+SUFFIX=$RANDOM
+ACR=acr${GRUPO}${SUFFIX}
 ACI=aci-${GRUPO}
 DNS_LABEL=${GRUPO}-${SUFFIX}
 
 DB_NAME=vetflowdb
 DB_USER=vetflow
 
-# Senha do banco NUNCA fica craveada no script.
-# Prioridade: variável de ambiente DB_PASSWORD -> arquivo .env local -> pede no terminal.
+# Prioridade: variavel DB_PASSWORD -> .env local -> pede no terminal
 if [ -z "$DB_PASSWORD" ] && [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
 fi
@@ -38,7 +28,6 @@ if [ -z "$DB_PASSWORD" ]; then
   exit 1
 fi
 
-# Repositórios do projeto
 REPO_JAVA_URL="https://github.com/Challange-Vetflow/vetflow-java.git"
 REPO_DEVOPS_URL="https://github.com/Challange-Vetflow/vetflow-devops.git"
 
@@ -80,25 +69,10 @@ az acr build \
   --file Dockerfile.postgres \
   .
 
-echo " 6) Storage Account + Azure File Share (volume nomeado do banco)"
-az storage account create \
-  --resource-group "$RG" \
-  --name "$STORAGE" \
-  --location "$LOCATION" \
-  --sku Standard_LRS \
-  --tags owner=$GRUPO environment=dev cost-center=fiap
-
-STORAGE_KEY=$(az storage account keys list \
-  --resource-group "$RG" \
-  --account-name "$STORAGE" \
-  --query "[0].value" --output tsv)
-
-az storage share create \
-  --name "$SHARE" \
-  --account-name "$STORAGE" \
-  --account-key "$STORAGE_KEY"
-
-echo " 7) Container Group no ACI (App + Banco, ambos via CLI)"
+echo " 6) Container Group no ACI (App + Banco, ambos via CLI)"
+# Armazenamento efemero: Postgres nao inicializa em Azure File Share (SMB)
+# por causa de permissoes fixas 777, sem alternativa de mount options no
+# ACI. "Volume nomeado" nao e exigencia desta Sprint.
 cat > "$WORKDIR/containergroup.yaml" << EOF
 apiVersion: '2021-10-01'
 location: $LOCATION
@@ -129,11 +103,6 @@ properties:
         value: $DB_USER
       - name: POSTGRES_PASSWORD
         secureValue: '$DB_PASSWORD'
-      - name: PGDATA
-        value: /var/lib/postgresql/data/pgdata
-      volumeMounts:
-      - name: dbdata
-        mountPath: /var/lib/postgresql/data
   - name: vetflow-app
     properties:
       image: $ACR_LOGIN_SERVER/vetflow-api:v1
@@ -154,12 +123,6 @@ properties:
   - server: $ACR_LOGIN_SERVER
     username: $ACR_USER
     password: '$ACR_PASS'
-  volumes:
-  - name: dbdata
-    azureFile:
-      shareName: $SHARE
-      storageAccountName: $STORAGE
-      storageAccountKey: '$STORAGE_KEY'
 tags:
   owner: $GRUPO
 type: Microsoft.ContainerInstance/containerGroups
@@ -177,7 +140,6 @@ FQDN=$(az container show \
 cat > .ultimo-deploy.env << EOF
 RG=$RG
 ACR=$ACR
-STORAGE=$STORAGE
 ACI=$ACI
 FQDN=$FQDN
 EOF

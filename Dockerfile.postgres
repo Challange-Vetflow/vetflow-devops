@@ -1,17 +1,10 @@
 FROM postgres:16
 
-# Nome do banco e usuário (fixos, não sensíveis).
-# POSTGRES_PASSWORD é OBRIGATÓRIO em runtime (docker-compose.yml / --env-file /
-# ACI secureValue) — a imagem oficial do Postgres recusa subir sem ela definida,
-# então não colocamos nenhum valor default aqui (evita senha em texto puro no
-# código-fonte).
+# POSTGRES_PASSWORD obrigatorio em runtime (sem default aqui de proposito)
 ENV POSTGRES_DB=vetflowdb
 ENV POSTGRES_USER=vetflow
 
-# Nenhum script de init aqui: o schema (tabelas, comentários, dados iniciais)
-# é criado automaticamente pelo Flyway quando o container da API sobe e se
-# conecta neste banco pela primeira vez (migrations em db-patches/, injetadas
-# no .jar da API pelo Dockerfile). script_bd.sql neste repositório é só a
-# documentação do DDL resultante, exigida pelo enunciado (item 3.3).
+# Sem script de init: o schema e criado automaticamente pelo Flyway quando
+# a API conecta. script_bd.sql no repo e so documentacao do DDL resultante.
 
 EXPOSE 5432

@@ -1,18 +1,13 @@
 #!/bin/bash
-# =============================================================
-# VetFlow – Remoção dos Recursos Azure (Sprint 3 – ACR + ACI)
-# Challenge FIAP 2026 – DevOps Tools & Cloud Computing
-# =============================================================
-# Deletar o Resource Group remove automaticamente TUDO que foi
-# criado pelo criacao.sh: ACR, imagens, ACI (app + banco),
-# Storage Account e o File Share (volume nomeado).
+# VetFlow - Remocao dos Recursos Azure (Sprint 3 - ACR + ACI)
+# Deletar o Resource Group remove tudo criado pelo criacao.sh: ACR, imagens e ACI.
 
 GRUPO=vetflow
 RG=rg-$GRUPO
 
 echo "============================================="
 echo " Removendo Resource Group: $RG"
-echo " TODOS os recursos serão deletados (ACR, ACI, Storage)!"
+echo " TODOS os recursos serão deletados (ACR, ACI)!"
 echo "============================================="
 
 read -p "Tem certeza? (s/N): " CONFIRM

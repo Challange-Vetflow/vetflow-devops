@@ -76,9 +76,16 @@ vacinas e medicamentos, e serve de backend para app mobile e dashboard clínico.
 | Azure Container Registry (ACR) | Registry das imagens `vetflow-api` e `vetflow-db`, geradas via `az acr build` (build ocorre na nuvem) |
 | Container Group (ACI) — `aci-vetflow` | Grupo com 2 containers na mesma rede interna (localhost) — IP público com DNS label na porta 8080 |
 | vetflow-app | Container Spring Boot — porta 8080 — usuário `vetflow` (não root) |
-| vetflow-db | Container PostgreSQL 16 — porta 5432 (interna, acessível via `localhost` pelo container da API) |
-| Azure File Share (`vetflow-db-data`) | Volume nomeado — persiste `/var/lib/postgresql/data` fora do ciclo de vida do container |
-| Storage Account | Hospeda o Azure File Share usado como volume persistente |
+| vetflow-db | Container PostgreSQL 16 — porta 5432 (interna, acessível via `localhost` pelo container da API) — armazenamento efêmero (sem volume persistente; ver nota abaixo) |
+
+> **Nota sobre persistência:** testamos montar `/var/lib/postgresql/data`
+> num Azure File Share (SMB) e o Postgres se recusa a inicializar por causa
+> das permissões fixas que o SMB impõe (sem controle de `dir_mode`/`file_mode`
+> disponível no volume nativo do ACI). Os containers de banco usam
+> armazenamento efêmero do próprio container — suficiente pro escopo desta
+> entrega (os recursos só existem durante o teste e a gravação do vídeo, e
+> são removidos em seguida). "Volume nomeado" era exigência da Sprint 1, não
+> desta Sprint 3.
 
 ---
 
@@ -232,7 +239,7 @@ docker compose down
 
 ### Opção 2 — Azure CLI: ACR + ACI (provisionamento completo em nuvem)
 
-Todos os recursos (imagens da API e do banco, registry, storage e os
+Todos os recursos (imagens da API e do banco, registry e os
 containers em execução) são criados via Azure CLI — nada é criado
 manualmente pelo Portal.
 
@@ -258,10 +265,8 @@ O script `criacao.sh` executa, em sequência:
    copia `Dockerfile` + `db-patches/` deste repositório, build ocorre na nuvem)
 4. Builda a imagem do banco via `az acr build` (usa `Dockerfile.postgres`;
    o schema é criado pelo Flyway quando a API conecta, não por init script)
-5. Cria a Storage Account + Azure File Share (volume nomeado do Postgres)
-6. Cria o Container Group no ACI com os dois containers (`vetflow-app` e
-   `vetflow-db`), expõe a porta 8080 publicamente com DNS label, e monta
-   o File Share em `/var/lib/postgresql/data`
+5. Cria o Container Group no ACI com os dois containers (`vetflow-app` e
+   `vetflow-db`), expõe a porta 8080 publicamente com DNS label
 
 Ao final, o script imprime o endereço público (FQDN) e os endpoints.
 
@@ -304,7 +309,7 @@ az container exec --resource-group rg-vetflow --name aci-vetflow --container-nam
 | `script_bd.sql` | DDL documentado das 7 tabelas do domínio (exigência item 3.3 do enunciado) |
 | `docker-compose.yml` | Orquestra API + Postgres com rede e volume nomeado (uso local) |
 | `.env.example` | Modelo da variável `DB_PASSWORD` (copie para `.env`, nunca commitado) |
-| `criacao.sh` | Script Azure CLI completo: ACR, build das imagens, Storage/File Share, Container Group (ACI) — pede a senha do banco no terminal |
+| `criacao.sh` | Script Azure CLI completo: ACR, build das imagens, Container Group (ACI) — pede a senha do banco no terminal |
 | `remocao.sh` | Remove todos os recursos Azure após a avaliação |
 | `comandos.sh` | Roteiro de comandos passo a passo usado na gravação do vídeo demonstrativo (inclui o login obrigatório) |
 

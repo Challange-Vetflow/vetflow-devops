@@ -1,5 +1,4 @@
--- REFERÊNCIA — arquivo IDÊNTICO ao original do vetflow-java (não sofre patch,
--- incluído aqui só para documentação; não é copiado para dentro do jar).
+-- Referência (idêntico ao original do vetflow-java, sem patch)
 
 -- V3: Carga inicial de dados para desenvolvimento e demonstração
 -- Senha de todos os usuários de teste: senha123
