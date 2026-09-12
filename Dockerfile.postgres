@@ -1,11 +1,17 @@
 FROM postgres:16
 
-# Nome do banco, usuário e senha padrão
+# Nome do banco e usuário (fixos, não sensíveis).
+# POSTGRES_PASSWORD é OBRIGATÓRIO em runtime (docker-compose.yml / --env-file /
+# ACI secureValue) — a imagem oficial do Postgres recusa subir sem ela definida,
+# então não colocamos nenhum valor default aqui (evita senha em texto puro no
+# código-fonte).
 ENV POSTGRES_DB=vetflowdb
 ENV POSTGRES_USER=vetflow
-ENV POSTGRES_PASSWORD=Fiap@Cloud2026
 
-COPY script_bd.sql /docker-entrypoint-initdb.d/01-script_bd.sql
+# Nenhum script de init aqui: o schema (tabelas, comentários, dados iniciais)
+# é criado automaticamente pelo Flyway quando o container da API sobe e se
+# conecta neste banco pela primeira vez (migrations em db-patches/, injetadas
+# no .jar da API pelo Dockerfile). script_bd.sql neste repositório é só a
+# documentação do DDL resultante, exigida pelo enunciado (item 3.3).
 
-# Porta padrão do PostgreSQL
 EXPOSE 5432
