@@ -75,77 +75,45 @@ az storage share show --name vetflow-db-data --account-name <STORAGE_ACCOUNT>
 
 # ------------------------------------------------------------
 # Passo 6 — LOGIN (obrigatório antes de qualquer /api/**)
+# Feito por curl (CMD) em vez de Postman — funcionalmente idêntico,
+# o enunciado não exige uma ferramenta específica, só a evidência.
 # ------------------------------------------------------------
-# No Postman:
-#   Método : POST
-#   URL    : http://<FQDN>:8080/api/auth/login
-#   Body (raw JSON):
-# {
-#   "email": "vet@vetflow.com",
-#   "senha": "senha123"
-# }
-# Esperado: 200 OK + cookie de sessão salvo automaticamente pelo Postman.
-# Todas as chamadas seguintes reaproveitam esse cookie sozinhas.
+set FQDN=<cole aqui o FQDN impresso pelo criacao.sh>
+
+curl -c cookies.txt -X POST http://%FQDN%:8080/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"vet@vetflow.com\",\"senha\":\"senha123\"}"
+:: Esperado: 200 OK + cookie salvo em cookies.txt. As chamadas -b cookies.txt
+:: a seguir reaproveitam essa sessão sozinhas.
 
 # ------------------------------------------------------------
 # Passo 7 — CRUD completo, uma operação por vez, cada uma
 # seguida IMEDIATAMENTE do SELECT que prova ela no banco.
 # ------------------------------------------------------------
 
-# 7.1 CREATE Tutor
-# Postman: POST http://<FQDN>:8080/api/tutors
-# Body:
-# {
-#   "name": "Carlos Silva",
-#   "email": "carlos.silva.novo@email.com",
-#   "phone": "11911111111"
-# }
-# Esperado: 201 Created
+# 7.1 CREATE Tutor — anote o "id" retornado na resposta
+curl -b cookies.txt -X POST http://%FQDN%:8080/api/tutors -H "Content-Type: application/json" -d "{\"name\":\"Carlos Silva\",\"email\":\"carlos.silva.novo@email.com\",\"phone\":\"11911111111\"}"
 
 az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db --exec-command "psql -U vetflow -d vetflowdb"
 # Dentro da sessão psql que abrir, digite:
 #   SELECT id, name, email, phone FROM cv_tutors;
 # Para sair: \q
 
-# 7.2 CREATE Pet (troque tutorId pelo id retornado no passo 7.1)
-# Postman: POST http://<FQDN>:8080/api/pets
-# Body:
-# {
-#   "name": "Rex",
-#   "species": "DOG",
-#   "breed": "Labrador",
-#   "birthDate": "2022-03-15",
-#   "weightKg": 12.5,
-#   "tutorId": 3
-# }
-# Esperado: 201 Created
+# 7.2 CREATE Pet — troque tutorId pelo id anotado em 7.1; anote o id do PET retornado
+curl -b cookies.txt -X POST http://%FQDN%:8080/api/pets -H "Content-Type: application/json" -d "{\"name\":\"Rex\",\"species\":\"DOG\",\"breed\":\"Labrador\",\"birthDate\":\"2022-03-15\",\"weightKg\":12.5,\"tutorId\":3}"
 
 az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db --exec-command "psql -U vetflow -d vetflowdb"
 #   SELECT id, name, species, tutor_id FROM cv_pets;
 
 # 7.3 READ — listar pets
-# Postman: GET http://<FQDN>:8080/api/pets
-# Esperado: 200 OK, com o pet recém-criado no array
+curl -b cookies.txt http://%FQDN%:8080/api/pets
 
-# 7.4 UPDATE Pet (troque {id} pelo id do pet criado em 7.2)
-# Postman: PUT http://<FQDN>:8080/api/pets/{id}
-# Body:
-# {
-#   "name": "Rex",
-#   "species": "DOG",
-#   "breed": "Golden Retriever",
-#   "birthDate": "2022-03-15",
-#   "weightKg": 13.0,
-#   "tutorId": 3
-# }
-# Esperado: 200 OK com "breed": "Golden Retriever"
+# 7.4 UPDATE Pet — troque {id} pelo id do pet criado em 7.2
+curl -b cookies.txt -X PUT http://%FQDN%:8080/api/pets/{id} -H "Content-Type: application/json" -d "{\"name\":\"Rex\",\"species\":\"DOG\",\"breed\":\"Golden Retriever\",\"birthDate\":\"2022-03-15\",\"weightKg\":13.0,\"tutorId\":3}"
 
 az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db --exec-command "psql -U vetflow -d vetflowdb"
 #   SELECT id, name, breed FROM cv_pets WHERE id = <id do pet>;
 
-# 7.5 DELETE Pet (troque {id})
-# Postman: DELETE http://<FQDN>:8080/api/pets/{id}
-# Esperado: 204 No Content
+# 7.5 DELETE Pet — troque {id}
+curl -b cookies.txt -X DELETE http://%FQDN%:8080/api/pets/{id}
 
 az container exec --resource-group rg-vetflow --name aci-vetflow --container-name vetflow-db --exec-command "psql -U vetflow -d vetflowdb"
 #   SELECT id, name FROM cv_pets;
