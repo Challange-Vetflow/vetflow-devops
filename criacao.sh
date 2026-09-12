@@ -129,6 +129,8 @@ properties:
         value: $DB_USER
       - name: POSTGRES_PASSWORD
         secureValue: '$DB_PASSWORD'
+      - name: PGDATA
+        value: /var/lib/postgresql/data/pgdata
       volumeMounts:
       - name: dbdata
         mountPath: /var/lib/postgresql/data
