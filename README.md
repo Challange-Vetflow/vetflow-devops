@@ -47,7 +47,7 @@ vacinas e medicamentos, e serve de backend para app mobile e dashboard clínico.
 | Banco | PostgreSQL 16 (containerizado — imagem `Dockerfile.postgres`) |
 | Documentação | Swagger / OpenAPI (springdoc) |
 | Container | Docker + Docker Compose (local) / Azure Container Registry + Azure Container Instances (nuvem) |
-| Cloud | Microsoft Azure — ACR + ACI (`brazilsouth`) |
+| Cloud | Microsoft Azure — ACR + ACI (`eastus`) |
 | Infra como código | Azure CLI (`az acr build`, `az container create`) |
 
 > **Nota de migração (Sprint 3):** o banco foi migrado de H2 para PostgreSQL
