@@ -11,7 +11,7 @@ set -e
 
 # ── Variáveis principais ─────────────────────────────────────
 GRUPO=vetflow
-LOCATION=brazilsouth
+LOCATION=eastus
 
 RG=rg-$GRUPO
 SUFFIX=$RANDOM                         
