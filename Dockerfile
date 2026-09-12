@@ -65,4 +65,4 @@ ENV SPRING_CACHE_TYPE=simple
 EXPOSE 8080
 USER vetflow
 
-CMD ["java", "-jar", "/app/vetflow.jar"]
+CMD ["sh", "-c", "echo 'Container rodando como usuario:' $(whoami) && exec java -jar /app/vetflow.jar"]
